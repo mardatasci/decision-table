@@ -48,6 +48,7 @@ A tool for creation, editing, management, and optimization of decision tables. D
 ### Interfaces
 - **CLI** (`dt`): Full-featured command-line interface
 - **GUI** (`dt-gui`): Single-window Tkinter application with professional styling
+- **Web UI** (`dt-web`): Browser-based Dash application with dark theme, tabbed analysis panels, and full editing capabilities
 - **Python API**: Import and use programmatically
 
 ### Editing
@@ -109,13 +110,48 @@ venv\Scripts\Activate.ps1
 # Install with dependencies
 pip install -e ".[dev]"
 
+# Install with web UI support
+pip install -e ".[web]"
+
+# Install everything
+pip install -e ".[dev,web]"
+
 # Or install from requirements.txt
 pip install -r requirements.txt
 ```
 
 ## Usage
 
-### GUI
+### Web UI
+
+```bash
+dt-web
+# or
+python -m decision_table.web.run
+
+# Options
+dt-web --port 8055          # custom port (default: 8050)
+dt-web --debug              # enable hot-reload for development
+dt-web --host 0.0.0.0       # bind to all interfaces
+```
+
+Open your browser to `http://127.0.0.1:8050` (or the port you specified).
+
+The web UI provides a single-page editor with everything in one view:
+
+- **Toolbar**: New, Open (upload JSON/CSV/Excel), Save (download), Undo, Redo, format selector
+- **Status bar**: Condition/action/rule/constraint counts and hit policy at a glance
+- **Add cards**: Inline forms to add conditions (boolean/enum/numeric), actions, and rules (regular, else, copy last)
+- **Remove dropdown**: Select and remove any condition, action, or rule
+- **Grid editor**: Click any cell to cycle through its values (conditions cycle through values + don't-care, actions cycle through values)
+- **Analysis tabs** (below the grid):
+  - **Validation**: Run all 5 checks or individual checks, styled error/warning/info messages with rule references
+  - **Reduction**: Choose from 4 algorithms, view reduced table, compare all methods side-by-side, apply results
+  - **Testing**: Generate per-rule, boundary value, or pairwise tests, view coverage metrics, export to CSV
+  - **Constraints**: Add/remove impossible, exclusion, or implication constraints with dynamic forms
+- **Settings page**: Rename table, change hit policy (single/multi-hit), view table details
+
+### Desktop GUI
 
 ```bash
 dt-gui
@@ -123,7 +159,7 @@ dt-gui
 python -m decision_table.gui.app
 ```
 
-The GUI provides:
+The desktop GUI provides:
 - **Toolbar**: New, Open, Save, Undo, Redo, Add/Copy/Remove Rule, Validate, Reduce, Tests
 - **Add bar**: Inline forms to add conditions (boolean/enum/numeric) and actions
 - **Remove bar**: Multi-select listboxes to remove conditions, actions, or rules (Cmd/Ctrl+click for multiple)
@@ -353,7 +389,7 @@ pytest tests/ --cov=decision_table --cov-report=xml
 
 ```
 decision_table/
-├── pyproject.toml          # Package config, entry points (dt, dt-gui)
+├── pyproject.toml          # Package config, entry points (dt, dt-gui, dt-web)
 ├── requirements.txt        # Pinned dependencies
 ├── LICENSE                 # MIT License
 ├── README.md
@@ -365,8 +401,19 @@ decision_table/
 │   ├── testing.py          # Test case generation, BVA, pairwise, coverage metrics
 │   ├── serialization.py    # JSON, CSV, Excel I/O + test case export
 │   ├── cli.py              # Click-based CLI (dt command)
-│   └── gui/
-│       └── app.py          # Single-window Tkinter GUI (dt-gui command)
+│   ├── gui/
+│   │   └── app.py          # Single-window Tkinter GUI (dt-gui command)
+│   └── web/
+│       ├── __init__.py
+│       ├── app.py           # Dash application, layout, toolbar, sidebar, file I/O
+│       ├── run.py           # Entry point (dt-web command)
+│       ├── state.py         # State management: serialize/deserialize for dcc.Store + undo/redo
+│       ├── components.py    # Reusable UI components (grid builder, metric cards, status bar)
+│       ├── assets/
+│       │   └── style.css    # Dark theme CSS (DARKLY + custom grid/validation styles)
+│       └── pages/
+│           ├── editor.py    # Main editor: grid, add/remove, validation/reduction/testing/constraints tabs
+│           └── settings.py  # Table metadata and configuration
 ├── tests/                  # 128 tests
 │   ├── conftest.py         # Shared fixtures
 │   ├── test_model.py       # Model tests (conditions, rules, constraints, undo/redo)
@@ -386,9 +433,11 @@ decision_table/
 | click | >= 8.0 | CLI framework |
 | openpyxl | >= 3.1 | Excel file support |
 | rich | >= 13.0 | Pretty CLI table output |
+| tkinter | (stdlib) | Desktop GUI - ships with Python |
+| dash | >= 2.14 | Web UI framework (optional, `pip install -e ".[web]"`) |
+| dash-bootstrap-components | >= 1.5 | Web UI Bootstrap components (optional) |
 | pytest | >= 8.0 | Testing (dev) |
 | pytest-cov | >= 5.0 | Coverage reporting (dev) |
-| tkinter | (stdlib) | GUI - ships with Python |
 
 ## Disclaimer
 

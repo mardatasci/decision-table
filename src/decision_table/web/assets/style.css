@@ -1,0 +1,262 @@
+/* Decision Table Web Editor - Custom Styles */
+
+/* ===== Decision table grid ===== */
+.dt-grid-wrapper {
+    overflow-x: auto;
+    margin-bottom: 1rem;
+}
+.dt-grid {
+    border-collapse: collapse;
+    width: auto;
+    min-width: 100%;
+}
+.dt-grid th,
+.dt-grid td {
+    padding: 0.4rem 0.8rem;
+    text-align: center;
+    border: 1px solid #30363d;
+    min-width: 80px;
+}
+.dt-corner {
+    background-color: #0d1117;
+    min-width: 160px;
+}
+.dt-header-type {
+    background-color: #0d1117;
+    color: #6e7681;
+    font-size: 0.75rem;
+    min-width: 50px;
+}
+.dt-header-rule {
+    background-color: #21262d;
+    color: #c9d1d9;
+    font-weight: 600;
+}
+.dt-header-else {
+    background-color: #9e6a03;
+    color: white;
+    font-weight: 600;
+}
+.dt-row-label {
+    text-align: left !important;
+    padding-left: 12px !important;
+    font-weight: 500;
+    min-width: 160px;
+}
+.dt-label-condition {
+    background-color: #1c2d4a;
+    color: #c9d1d9;
+}
+.dt-label-action {
+    background-color: #1a3326;
+    color: #c9d1d9;
+}
+.dt-type-cell {
+    color: #6e7681;
+    font-size: 0.75rem;
+    background-color: #0d1117;
+}
+.dt-cell-condition {
+    background-color: #161b22;
+    color: #c9d1d9;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s;
+}
+.dt-cell-condition:hover {
+    background-color: #264070;
+}
+.dt-cell-action {
+    background-color: #161b22;
+    color: #c9d1d9;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s;
+}
+.dt-cell-action:hover {
+    background-color: #244d35;
+}
+.dt-cell-else {
+    background-color: #3d2e10;
+    color: #d29922;
+    cursor: pointer;
+    user-select: none;
+}
+.dt-cell-else:hover {
+    background-color: #4d3a14;
+}
+.dt-cell-dontcare {
+    color: #6e7681 !important;
+}
+.dt-cell-empty {
+    color: #484f58 !important;
+}
+.dt-separator td {
+    height: 3px;
+    padding: 0;
+    background-color: #58a6ff;
+    border: none;
+}
+
+/* ===== Metric cards ===== */
+.metric-card {
+    text-align: center;
+    padding: 1rem;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background-color: #161b22;
+}
+.metric-card .metric-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #58a6ff;
+}
+.metric-card .metric-label {
+    font-size: 0.7rem;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.15rem;
+}
+
+/* ===== Sidebar ===== */
+.nav-pills .nav-link.active {
+    background-color: #1f6feb;
+}
+.nav-pills .nav-link {
+    color: #8b949e;
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+}
+.nav-pills .nav-link:hover:not(.active) {
+    color: #c9d1d9;
+    background-color: #21262d;
+}
+
+/* ===== Cards ===== */
+.card {
+    border-color: #30363d;
+}
+.card-header {
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #8b949e;
+    background-color: #161b22;
+    border-bottom: 1px solid #30363d;
+}
+
+/* ===== Tables ===== */
+.table {
+    font-size: 0.9rem;
+}
+.table th {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #8b949e;
+    border-bottom: 2px solid #30363d;
+}
+.table td {
+    vertical-align: middle;
+}
+
+/* ===== Validation messages ===== */
+.val-msg-error {
+    border-left: 3px solid #f85149;
+    background-color: #1c1215;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+.val-msg-warning {
+    border-left: 3px solid #d29922;
+    background-color: #1c1a12;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+.val-msg-info {
+    border-left: 3px solid #58a6ff;
+    background-color: #121c2b;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+/* ===== Output panel ===== */
+.output-panel {
+    background-color: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem;
+    font-family: monospace;
+    font-size: 0.85rem;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    color: #c9d1d9;
+}
+
+/* ===== Dropdowns (Dash/React-Select dark mode) ===== */
+.Select-control,
+div[class$="-control"] {
+    background-color: #0d1117 !important;
+    border-color: #30363d !important;
+    color: #c9d1d9 !important;
+}
+div[class$="-singleValue"] {
+    color: #c9d1d9 !important;
+}
+div[class$="-placeholder"] {
+    color: #6e7681 !important;
+}
+div[class$="-menu"] {
+    background-color: #161b22 !important;
+    border: 1px solid #30363d !important;
+}
+div[class$="-option"] {
+    background-color: #161b22 !important;
+    color: #c9d1d9 !important;
+}
+div[class$="-option"]:hover {
+    background-color: #1f6feb !important;
+    color: #ffffff !important;
+}
+div[class$="-Input"] input {
+    color: #c9d1d9 !important;
+}
+div[class$="-indicatorContainer"] {
+    color: #6e7681 !important;
+}
+div[class$="-indicatorSeparator"] {
+    background-color: #30363d !important;
+}
+
+/* ===== List groups ===== */
+.list-group-item {
+    background-color: #161b22;
+    border-color: #30363d;
+    color: #c9d1d9;
+}
+
+/* ===== General ===== */
+h2 { color: #e6edf3; font-weight: 600; }
+h4 { color: #c9d1d9; font-weight: 600; }
+h5 { color: #c9d1d9; font-weight: 500; }
+hr { border-color: #30363d; }
+
+/* ===== Reduction steps ===== */
+.reduction-step {
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.85rem;
+    color: #c9d1d9;
+}
