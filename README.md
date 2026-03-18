@@ -398,6 +398,10 @@ In no event shall the authors or contributors be liable for any claim, damages, 
 
 **Use at your own risk.** No guarantee is made regarding the correctness, completeness, or reliability of any output produced by this tool.
 
+## Acknowledgments
+
+Built with assistance from [Claude](https://claude.ai) by Anthropic.
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
