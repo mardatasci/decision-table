@@ -1,0 +1,10 @@
+Type,Name,Rule 1,Rule 2,Rule 3,Rule 4,Rule 5
+C,Score >= 90,T,F,F,F,F
+C,Score >= 80,T,T,F,F,F
+C,Score >= 70,T,T,T,F,F
+C,Score >= 60,T,T,T,T,F
+A,Grade A,X,,,,
+A,Grade B,,X,,,
+A,Grade C,,,X,,
+A,Grade D,,,,X,
+A,Grade F,,,,,X

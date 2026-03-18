@@ -1,0 +1,69 @@
+{
+  "name": "Shipping Discount",
+  "conditions": [
+    {
+      "name": "Order Total > $100",
+      "possible_values": ["T", "F"],
+      "description": "Whether the order total exceeds $100"
+    },
+    {
+      "name": "Premium Member",
+      "possible_values": ["T", "F"],
+      "description": "Whether the customer is a premium member"
+    },
+    {
+      "name": "Domestic Shipping",
+      "possible_values": ["T", "F"],
+      "description": "Whether the shipping destination is domestic"
+    }
+  ],
+  "actions": [
+    {
+      "name": "Free Shipping",
+      "possible_values": ["X", ""],
+      "description": "Apply free shipping"
+    },
+    {
+      "name": "10% Discount",
+      "possible_values": ["X", ""],
+      "description": "Apply 10% discount"
+    }
+  ],
+  "rules": [
+    {
+      "condition_entries": {"Order Total > $100": "T", "Premium Member": "T", "Domestic Shipping": "T"},
+      "action_entries": {"Free Shipping": "X", "10% Discount": "X"}
+    },
+    {
+      "condition_entries": {"Order Total > $100": "T", "Premium Member": "T", "Domestic Shipping": "F"},
+      "action_entries": {"Free Shipping": "", "10% Discount": "X"}
+    },
+    {
+      "condition_entries": {"Order Total > $100": "T", "Premium Member": "F", "Domestic Shipping": "T"},
+      "action_entries": {"Free Shipping": "X", "10% Discount": ""}
+    },
+    {
+      "condition_entries": {"Order Total > $100": "T", "Premium Member": "F", "Domestic Shipping": "F"},
+      "action_entries": {"Free Shipping": "", "10% Discount": ""}
+    },
+    {
+      "condition_entries": {"Order Total > $100": "F", "Premium Member": "T", "Domestic Shipping": "T"},
+      "action_entries": {"Free Shipping": "X", "10% Discount": ""}
+    },
+    {
+      "condition_entries": {"Order Total > $100": "F", "Premium Member": "T", "Domestic Shipping": "F"},
+      "action_entries": {"Free Shipping": "", "10% Discount": ""}
+    },
+    {
+      "condition_entries": {"Order Total > $100": "F", "Premium Member": "F", "Domestic Shipping": "T"},
+      "action_entries": {"Free Shipping": "", "10% Discount": ""}
+    },
+    {
+      "condition_entries": {"Order Total > $100": "F", "Premium Member": "F", "Domestic Shipping": "F"},
+      "action_entries": {"Free Shipping": "", "10% Discount": ""}
+    }
+  ],
+  "metadata": {
+    "description": "Determines shipping discount eligibility based on order total, membership, and destination."
+  }
+}

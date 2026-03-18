@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing / Coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.cover
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment / Secrets
+.env
+.env.*
+*.pem
+*.key
+credentials.*
+secrets.*
+
+# OS
+.DS_Store
+Desktop.ini
+ehthumbs.db
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Editor backups
+*.bak
+*.orig
+*.tmp

@@ -1,0 +1,58 @@
+{
+  "name": "Login Validation",
+  "conditions": [
+    {
+      "name": "Valid Credentials",
+      "possible_values": ["T", "F"],
+      "description": "Username and password match"
+    },
+    {
+      "name": "Account Locked",
+      "possible_values": ["T", "F"],
+      "description": "Account is locked due to too many failed attempts"
+    },
+    {
+      "name": "2FA Required",
+      "possible_values": ["T", "F"],
+      "description": "Two-factor authentication is enabled"
+    }
+  ],
+  "actions": [
+    {
+      "name": "Grant Access",
+      "possible_values": ["X", ""],
+      "description": "Allow the user to log in"
+    },
+    {
+      "name": "Show 2FA Prompt",
+      "possible_values": ["X", ""],
+      "description": "Present the 2FA challenge"
+    },
+    {
+      "name": "Show Error",
+      "possible_values": ["X", ""],
+      "description": "Display an error message"
+    }
+  ],
+  "rules": [
+    {
+      "condition_entries": {"Valid Credentials": "T", "Account Locked": "F", "2FA Required": "F"},
+      "action_entries": {"Grant Access": "X", "Show 2FA Prompt": "", "Show Error": ""}
+    },
+    {
+      "condition_entries": {"Valid Credentials": "T", "Account Locked": "F", "2FA Required": "T"},
+      "action_entries": {"Grant Access": "", "Show 2FA Prompt": "X", "Show Error": ""}
+    },
+    {
+      "condition_entries": {"Valid Credentials": "T", "Account Locked": "T", "2FA Required": "-"},
+      "action_entries": {"Grant Access": "", "Show 2FA Prompt": "", "Show Error": "X"}
+    },
+    {
+      "condition_entries": {"Valid Credentials": "F", "Account Locked": "-", "2FA Required": "-"},
+      "action_entries": {"Grant Access": "", "Show 2FA Prompt": "", "Show Error": "X"}
+    }
+  ],
+  "metadata": {
+    "description": "Determines the login response based on credential validity, account status, and 2FA requirements."
+  }
+}

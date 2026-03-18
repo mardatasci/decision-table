@@ -1,0 +1,119 @@
+{
+  "name": "Insurance Policy - Full Featured Example",
+  "table_type": "single_hit",
+  "conditions": [
+    {
+      "name": "Age",
+      "possible_values": ["<18", "18-64", ">=65"],
+      "condition_type": "numeric",
+      "ranges": [
+        {"label": "<18", "lower": null, "upper": 18, "lower_inclusive": true, "upper_inclusive": false},
+        {"label": "18-64", "lower": 18, "upper": 64, "lower_inclusive": true, "upper_inclusive": false},
+        {"label": ">=65", "lower": 65, "upper": null, "lower_inclusive": true, "upper_inclusive": true}
+      ],
+      "description": "Applicant age in years"
+    },
+    {
+      "name": "Smoker",
+      "possible_values": ["T", "F"],
+      "condition_type": "boolean",
+      "description": "Whether the applicant smokes"
+    },
+    {
+      "name": "Coverage",
+      "possible_values": ["Basic", "Standard", "Premium"],
+      "condition_type": "enum",
+      "description": "Requested coverage tier"
+    }
+  ],
+  "actions": [
+    {
+      "name": "Approve",
+      "possible_values": ["X", ""],
+      "description": "Approve the application"
+    },
+    {
+      "name": "Risk Level",
+      "possible_values": ["Low", "Medium", "High", ""],
+      "description": "Assessed risk level"
+    },
+    {
+      "name": "Surcharge",
+      "possible_values": ["0%", "15%", "25%", "50%", ""],
+      "description": "Premium surcharge applied"
+    }
+  ],
+  "constraints": [
+    {
+      "constraint_type": "impossible",
+      "conditions": {"Age": "<18", "Coverage": "Premium"},
+      "description": "Minors cannot apply for Premium coverage"
+    },
+    {
+      "constraint_type": "implication",
+      "conditions": {"Age": "<18", "Smoker": "F"},
+      "description": "Minors are assumed non-smokers (if Age<18 then Smoker must be F)"
+    }
+  ],
+  "rules": [
+    {
+      "condition_entries": {"Age": "<18", "Smoker": "F", "Coverage": "Basic"},
+      "action_entries": {"Approve": "X", "Risk Level": "Low", "Surcharge": "0%"},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": "<18", "Smoker": "F", "Coverage": "Standard"},
+      "action_entries": {"Approve": "X", "Risk Level": "Low", "Surcharge": "0%"},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": "18-64", "Smoker": "F", "Coverage": "-"},
+      "action_entries": {"Approve": "X", "Risk Level": "Low", "Surcharge": "0%"},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": "18-64", "Smoker": "T", "Coverage": "Basic"},
+      "action_entries": {"Approve": "X", "Risk Level": "Medium", "Surcharge": "15%"},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": "18-64", "Smoker": "T", "Coverage": "Standard"},
+      "action_entries": {"Approve": "X", "Risk Level": "Medium", "Surcharge": "25%"},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": "18-64", "Smoker": "T", "Coverage": "Premium"},
+      "action_entries": {"Approve": "X", "Risk Level": "High", "Surcharge": "50%"},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": ">=65", "Smoker": "F", "Coverage": "-"},
+      "action_entries": {"Approve": "X", "Risk Level": "Medium", "Surcharge": "15%"},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": ">=65", "Smoker": "T", "Coverage": "Basic"},
+      "action_entries": {"Approve": "X", "Risk Level": "High", "Surcharge": "25%"},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": ">=65", "Smoker": "T", "Coverage": "Standard"},
+      "action_entries": {"Approve": "X", "Risk Level": "High", "Surcharge": "50%"},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": ">=65", "Smoker": "T", "Coverage": "Premium"},
+      "action_entries": {"Approve": "", "Risk Level": "High", "Surcharge": ""},
+      "priority": 0
+    },
+    {
+      "condition_entries": {"Age": "-", "Smoker": "-", "Coverage": "-"},
+      "action_entries": {"Approve": "", "Risk Level": "", "Surcharge": ""},
+      "priority": -1,
+      "is_else": true
+    }
+  ],
+  "metadata": {
+    "description": "Full-featured example: numeric ranges (Age), enum (Coverage), boolean (Smoker), constraints (minors can't get Premium, minors assumed non-smoker), else rule, and priority."
+  }
+}

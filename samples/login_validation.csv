@@ -1,0 +1,7 @@
+Type,Name,Rule 1,Rule 2,Rule 3,Rule 4
+C,Valid Credentials,T,T,T,F
+C,Account Locked,F,F,T,-
+C,2FA Required,F,T,-,-
+A,Grant Access,X,,,
+A,Show 2FA Prompt,,X,,
+A,Show Error,,,X,X

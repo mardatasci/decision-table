@@ -1,0 +1,6 @@
+Type,Name,Rule 1,Rule 2,Rule 3,Rule 4,Rule 5,Rule 6,Rule 7,Rule 8
+C,Order > $100,T,T,T,T,F,F,F,F
+C,Premium Member,T,T,F,F,T,T,F,F
+C,Domestic,T,F,T,F,T,F,T,F
+A,Free Shipping,X,,X,,,,,
+A,10% Discount,X,X,,,,,,

@@ -1,0 +1,7 @@
+Type,Name,Rule 1,Rule 2,Rule 3,Rule 4,Rule 5,Rule 6
+C,Emergency Vehicle,T,T,T,F,F,F
+C,Pedestrian Waiting,T,F,-,T,T,F
+C,Timer Expired,-,-,-,T,F,F
+A,Green for Main,,,,,X,X
+A,Green for Cross,,,,X,,
+A,All Red,X,X,X,,,

@@ -1,0 +1,11 @@
+#,table_type=single_hit
+#,"constraint: impossible | Age=<18, Coverage=Premium | Minors cannot apply for Premium coverage"
+#,"constraint: implication | Age=<18, Smoker=F | Minors are assumed non-smokers (if Age<18 then Smoker must be F)"
+Type,Name,Rule 1,Rule 2,Rule 3,Rule 4,Rule 5,Rule 6,Rule 7,Rule 8,Rule 9,Rule 10,Rule 11 (ELSE)
+#,priority,0,0,0,0,0,0,0,0,0,0,-1
+C:NUMERIC,Age,<18,<18,18-64,18-64,18-64,18-64,>=65,>=65,>=65,>=65,ELSE
+C,Smoker,F,F,F,T,T,T,F,T,T,T,ELSE
+C:ENUM,Coverage,Basic,Standard,-,Basic,Standard,Premium,-,Basic,Standard,Premium,ELSE
+A,Approve,X,X,X,X,X,X,X,X,X,,
+A,Risk Level,Low,Low,Low,Medium,Medium,High,Medium,High,High,High,
+A,Surcharge,0%,0%,0%,15%,25%,50%,15%,25%,50%,,
