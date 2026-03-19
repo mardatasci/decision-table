@@ -27,11 +27,15 @@ from decision_table.validation import (
     validate_all,
 )
 from decision_table.reduction import (
+    clustering_reduction,
     compare_reductions,
     espresso,
+    incremental_reduction,
     petricks_method,
+    positive_region_reduction,
     quine_mccluskey,
     rule_merging,
+    variable_precision_reduction,
 )
 from decision_table.testing import (
     calculate_coverage,
@@ -58,6 +62,10 @@ _REDUCTION_METHODS = {
     "petricks": ("Petrick's Method", petricks_method),
     "rule_merging": ("Rule Merging", rule_merging),
     "espresso": ("Espresso", espresso),
+    "prr": ("Positive Region (RST)", positive_region_reduction),
+    "vpr": ("Variable Precision (RST)", variable_precision_reduction),
+    "clustering": ("Clustering", clustering_reduction),
+    "incremental": ("Incremental", incremental_reduction),
 }
 
 # ═══════════════════════════════════════════════════════════════════
@@ -706,7 +714,7 @@ def run_compare(_, store_data):
         comparison = compare_reductions(table)
         header = html.Thead(html.Tr([html.Th("Method"), html.Th("Original"), html.Th("Reduced"), html.Th("%"), html.Th("Equivalent")]))
         rows = []
-        for r in [comparison.qm_result, comparison.petrick_result, comparison.rule_merging_result, comparison.espresso_result]:
+        for r in [comparison.qm_result, comparison.petrick_result, comparison.rule_merging_result, comparison.espresso_result, comparison.prr_result, comparison.vpr_result, comparison.clustering_result]:
             if r is None:
                 continue
             orig = len(r.original_rules)

@@ -13,7 +13,11 @@ from ..model import (
 )
 from ..serialization import load_file, save_file
 from ..validation import Severity, validate_all
-from ..reduction import quine_mccluskey, petricks_method, rule_merging, espresso, compare_reductions
+from ..reduction import (
+    clustering_reduction, compare_reductions, espresso, incremental_reduction,
+    petricks_method, positive_region_reduction, quine_mccluskey, rule_merging,
+    variable_precision_reduction,
+)
 from ..testing import (
     generate_test_cases, generate_boundary_tests, generate_pairwise_tests,
     generate_all_tests, calculate_coverage, export_test_cases_csv,
@@ -146,6 +150,11 @@ class DecisionTableApp:
         am.add_command(label="Reduce (Petrick)", command=lambda: self._run_reduce_method("petrick"))
         am.add_command(label="Reduce (Rule Merging)", command=lambda: self._run_reduce_method("merge"))
         am.add_command(label="Reduce (Espresso)", command=lambda: self._run_reduce_method("espresso"))
+        am.add_separator()
+        am.add_command(label="Reduce (Positive Region / RST)", command=lambda: self._run_reduce_method("prr"))
+        am.add_command(label="Reduce (Variable Precision / RST)", command=lambda: self._run_reduce_method("vpr"))
+        am.add_command(label="Reduce (Clustering)", command=lambda: self._run_reduce_method("clustering"))
+        am.add_command(label="Reduce (Incremental)", command=lambda: self._run_reduce_method("incremental"))
         am.add_command(label="Undo Reduce", command=self.undo_reduce)
         am.add_separator()
         am.add_command(label="Compare All Methods", command=self.run_compare)
@@ -228,7 +237,7 @@ class DecisionTableApp:
         _btn(tb, "Validate", self.run_validate)
         _sep(tb)
 
-        self.reduce_method = ttk.Combobox(tb, values=["Quine-McCluskey", "Petrick", "Rule Merging", "Espresso"],
+        self.reduce_method = ttk.Combobox(tb, values=["Quine-McCluskey", "Petrick", "Rule Merging", "Espresso", "Positive Region (RST)", "Variable Precision (RST)", "Clustering", "Incremental"],
                                           state="readonly", width=16, font=_FONT_SMALL)
         self.reduce_method.set("Quine-McCluskey")
         self.reduce_method.pack(side=tk.LEFT, padx=2, pady=1)
@@ -791,6 +800,10 @@ class DecisionTableApp:
             "Petrick": "petrick",
             "Rule Merging": "merge",
             "Espresso": "espresso",
+            "Positive Region (RST)": "prr",
+            "Variable Precision (RST)": "vpr",
+            "Clustering": "clustering",
+            "Incremental": "incremental",
         }
         self._run_reduce_method(method_map.get(method, "qm"))
 
@@ -804,6 +817,10 @@ class DecisionTableApp:
             "petrick": petricks_method,
             "merge": rule_merging,
             "espresso": espresso,
+            "prr": positive_region_reduction,
+            "vpr": variable_precision_reduction,
+            "clustering": clustering_reduction,
+            "incremental": incremental_reduction,
         }
         res = methods.get(method, quine_mccluskey)(self.table)
 
@@ -844,13 +861,16 @@ class DecisionTableApp:
             ("Petrick", c.petrick_result),
             ("Merge", c.rule_merging_result),
             ("Espresso", c.espresso_result),
+            ("PRR", c.prr_result),
+            ("VPR", c.vpr_result),
+            ("Cluster", c.clustering_result),
         ]
         results = [(n, r) for n, r in results if r is not None]
 
         hdr = f"  {'':20s}" + "".join(f"{n:>12s}" for n, _ in results)
         sep = "  " + "-" * (20 + 12 * len(results))
         lines = [
-            "  Reduction Comparison (all 4 methods)",
+            "  Reduction Comparison (all methods)",
             "  " + "=" * (20 + 12 * len(results)), "",
             hdr, sep,
             f"  {'Original rules':<20s}" + "".join(f"{len(r.original_rules):>12d}" for _, r in results),
@@ -1066,8 +1086,10 @@ class DecisionTableApp:
 
     def _help_reduction(self):
         self._show_output(
-            "  REDUCTION ALGORITHMS (4 methods)\n"
+            "  REDUCTION ALGORITHMS (8 methods)\n"
             "  ================================\n\n"
+            "  ROW REDUCTION (merge/eliminate rules)\n"
+            "  -------------------------------------\n\n"
             "  QUINE-McCLUSKEY\n"
             "    A systematic method to find the minimum set of rules.\n"
             "    1. Groups rules by their action outputs\n"
@@ -1104,12 +1126,39 @@ class DecisionTableApp:
             "    Repeats until stable. Near-optimal, much faster than\n"
             "    Petrick on large tables.\n"
             "    Best for: large tables, production use.\n\n"
+            "  COLUMN REDUCTION (remove dispensable conditions)\n"
+            "  ------------------------------------------------\n\n"
+            "  POSITIVE REGION REDUCTION (RST)\n"
+            "    Uses Rough Set Theory to find the minimal set of conditions\n"
+            "    that preserves the positive region (all input combos remain\n"
+            "    correctly classified). Identifies and removes conditions\n"
+            "    that have no effect on decision-making.\n"
+            "    Best for: discovering irrelevant conditions.\n\n"
+            "  VARIABLE PRECISION REDUCTION (RST)\n"
+            "    Extends Positive Region Reduction with a configurable\n"
+            "    accuracy threshold (0.0-1.0). Ranks conditions by\n"
+            "    conditional entropy and removes the least significant.\n"
+            "    At 1.0 it equals PRR; lower values tolerate noise.\n"
+            "    Best for: noisy or approximate data.\n\n"
+            "  CLUSTERING\n"
+            "    Groups correlated conditions using Partitioning Around\n"
+            "    Medoids (PAM). Selects the most representative condition\n"
+            "    from each cluster, then verifies decision logic is preserved.\n"
+            "    Best for: tables with many correlated conditions.\n\n"
+            "  DYNAMIC REDUCTION\n"
+            "  -----------------\n\n"
+            "  INCREMENTAL\n"
+            "    Updates a previous reduction when rules change, only\n"
+            "    re-reducing affected action profiles. Wraps any base\n"
+            "    method (QM, Petrick, Merge, Espresso) with automatic\n"
+            "    fallback to full reduction when needed.\n"
+            "    Best for: interactive editing sessions.\n\n"
             "  MULTI-VALUED CONDITIONS:\n"
             "    All methods support enum/numeric conditions.\n"
             "    QM/Petrick use one-hot binary encoding with post-processing\n"
             "    to collapse back to don't-cares. Rule Merging and Espresso\n"
             "    work directly on the table representation.\n\n"
-            "  Use 'Compare All Methods' to run all 4 side by side."
+            "  Use 'Compare All Methods' to run all side by side."
         )
 
     def _help_testing(self):
