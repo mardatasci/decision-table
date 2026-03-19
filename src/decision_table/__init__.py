@@ -33,11 +33,15 @@ from .reduction import (
     ComparisonResult,
     ReductionResult,
     ReductionStep,
+    clustering_reduction,
     compare_reductions,
     espresso,
+    incremental_reduction,
     petricks_method,
+    positive_region_reduction,
     quine_mccluskey,
     rule_merging,
+    variable_precision_reduction,
 )
 from .testing import (
     CoverageReport,

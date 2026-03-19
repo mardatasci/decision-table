@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -890,12 +892,723 @@ def espresso(table: DecisionTable) -> ReductionResult:
     return ReductionResult("Espresso", list(table.rules), all_reduced, steps)
 
 
+def _project_rules_to_dont_care(
+    rules: list[Rule], conditions_to_remove: list[str],
+) -> list[Rule]:
+    """Set removed conditions to DONT_CARE and deduplicate resulting rules."""
+    projected: list[Rule] = []
+    seen: set[tuple] = set()
+
+    for rule in rules:
+        new_rule = copy.deepcopy(rule)
+        for cond_name in conditions_to_remove:
+            new_rule.condition_entries[cond_name] = DONT_CARE
+
+        cond_key = tuple(sorted(new_rule.condition_entries.items()))
+        act_key = new_rule.action_profile()
+        key = (cond_key, act_key)
+
+        if key not in seen:
+            seen.add(key)
+            projected.append(new_rule)
+
+    return projected
+
+
+def _condition_significance(
+    cond_name: str,
+    valid_combos: list[dict[str, str]],
+    combo_actions: dict[tuple, tuple],
+) -> float:
+    """Compute conditional entropy of the decision given a condition's value.
+
+    Lower entropy means the condition is more significant (more informative).
+    Returns the weighted average entropy across partitions.
+    """
+    # Partition combos by this condition's value
+    partitions: dict[str, list[tuple]] = {}
+    for combo in valid_combos:
+        val = combo.get(cond_name, DONT_CARE)
+        key = tuple(sorted(combo.items()))
+        partitions.setdefault(val, []).append(key)
+
+    total = len(valid_combos)
+    if total == 0:
+        return 0.0
+
+    weighted_entropy = 0.0
+    for val, keys in partitions.items():
+        # Count action distribution within this partition
+        action_counts: dict[tuple, int] = {}
+        for key in keys:
+            action = combo_actions.get(key)
+            if action is not None:
+                action_counts[action] = action_counts.get(action, 0) + 1
+
+        partition_total = sum(action_counts.values())
+        if partition_total == 0:
+            continue
+
+        entropy = 0.0
+        for count in action_counts.values():
+            p = count / partition_total
+            if p > 0:
+                entropy -= p * math.log2(p)
+
+        weighted_entropy += (partition_total / total) * entropy
+
+    return weighted_entropy
+
+
+def positive_region_reduction(table: DecisionTable) -> ReductionResult:
+    """Reduce by finding minimal attribute subset preserving the positive region.
+
+    Uses Rough Set Theory (RST) to identify conditions that can be entirely
+    removed without changing the table's decision-making. This is column
+    reduction (removing conditions) as opposed to row reduction (merging rules).
+
+    The positive region is the set of input combinations that are unambiguously
+    classified. A condition is dispensable if removing it does not shrink the
+    positive region.
+    """
+    steps: list[ReductionStep] = []
+
+    if not table.rules or not table.conditions:
+        return ReductionResult("Positive Region (RST)", list(table.rules), list(table.rules), steps)
+
+    normal_rules, else_rules = _split_else_rules(table.rules)
+    if not normal_rules:
+        return ReductionResult("Positive Region (RST)", list(table.rules), list(else_rules), steps)
+
+    # Get all valid input combinations and their actions from the original table
+    valid_combos = table.valid_input_combinations()
+    combo_actions: dict[tuple, tuple] = {}
+    for combo in valid_combos:
+        actions = table.effective_actions(combo)
+        if actions is not None:
+            combo_actions[tuple(sorted(combo.items()))] = tuple(sorted(actions.items()))
+
+    all_cond_names = [c.name for c in table.conditions]
+
+    # Find pairs of combos with different actions - these must remain distinguishable
+    diff_pairs: list[tuple[dict[str, str], dict[str, str]]] = []
+    combo_list = list(combo_actions.items())
+    for i in range(len(combo_list)):
+        for j in range(i + 1, len(combo_list)):
+            if combo_list[i][1] != combo_list[j][1]:
+                diff_pairs.append((dict(combo_list[i][0]), dict(combo_list[j][0])))
+
+    steps.append(ReductionStep(
+        "Identified distinguishing requirements",
+        {"total_combos": len(combo_actions), "different_action_pairs": len(diff_pairs)},
+    ))
+
+    if not diff_pairs:
+        # All combos have the same action - all conditions are dispensable
+        removed = list(all_cond_names)
+        reduced = _project_rules_to_dont_care(normal_rules, removed)
+        reduced.extend(else_rules)
+        steps.append(ReductionStep(
+            "All conditions dispensable (uniform actions)",
+            {"kept": [], "removed": removed},
+        ))
+        return ReductionResult("Positive Region (RST)", list(table.rules), reduced, steps)
+
+    # For each condition, determine which diff_pairs it can distinguish
+    cond_distinguishes: dict[str, set[int]] = {}
+    for cond_name in all_cond_names:
+        distinguished = set()
+        for idx, (c1, c2) in enumerate(diff_pairs):
+            if c1.get(cond_name) != c2.get(cond_name):
+                distinguished.add(idx)
+        cond_distinguishes[cond_name] = distinguished
+
+    steps.append(ReductionStep(
+        "Condition distinguishing power",
+        {c: len(d) for c, d in cond_distinguishes.items()},
+    ))
+
+    # Greedy set cover: pick condition that distinguishes the most uncovered pairs
+    remaining_pairs = set(range(len(diff_pairs)))
+    selected_conds: list[str] = []
+    available = list(all_cond_names)
+
+    while remaining_pairs and available:
+        best_cond = max(
+            available,
+            key=lambda c: len(cond_distinguishes[c] & remaining_pairs),
+        )
+        newly_covered = cond_distinguishes[best_cond] & remaining_pairs
+        if not newly_covered:
+            break  # remaining pairs can't be distinguished (inconsistent table)
+        selected_conds.append(best_cond)
+        available.remove(best_cond)
+        remaining_pairs -= newly_covered
+
+    # Try removing each selected condition to see if it's truly necessary (minimize)
+    for cond in list(selected_conds):
+        test_set = [c for c in selected_conds if c != cond]
+        # Check if test_set still distinguishes all pairs
+        covered = set()
+        for c in test_set:
+            covered |= cond_distinguishes[c]
+        if covered >= set(range(len(diff_pairs))):
+            selected_conds = test_set
+
+    removed_conds = [c for c in all_cond_names if c not in selected_conds]
+
+    steps.append(ReductionStep(
+        "Selected minimal condition subset",
+        {"kept": selected_conds, "removed": removed_conds},
+    ))
+
+    # Build reduced rules
+    reduced_rules = _project_rules_to_dont_care(normal_rules, removed_conds)
+    reduced_rules = _collapse_multi_valued(reduced_rules, table.conditions)
+    reduced_rules.extend(else_rules)
+
+    steps.append(ReductionStep(
+        "Reduction complete",
+        {
+            "original_conditions": len(all_cond_names),
+            "reduced_conditions": len(selected_conds),
+            "original_rules": len(table.rules),
+            "reduced_rules": len(reduced_rules),
+        },
+    ))
+
+    return ReductionResult("Positive Region (RST)", list(table.rules), reduced_rules, steps)
+
+
+def variable_precision_reduction(
+    table: DecisionTable, threshold: float = 0.9,
+) -> ReductionResult:
+    """Reduce using Variable Precision Rough Set (VPRS) theory.
+
+    Extends Positive Region Reduction by allowing a controlled degree of
+    inconsistency. The *threshold* parameter (0.0-1.0) specifies the minimum
+    classification accuracy that must be preserved.
+
+    A threshold of 1.0 is equivalent to standard PRR. Lower thresholds allow
+    more aggressive condition removal at the cost of some misclassification,
+    which is useful for noisy data.
+    """
+    steps: list[ReductionStep] = []
+
+    if not table.rules or not table.conditions:
+        return ReductionResult("Variable Precision (RST)", list(table.rules), list(table.rules), steps)
+
+    normal_rules, else_rules = _split_else_rules(table.rules)
+    if not normal_rules:
+        return ReductionResult("Variable Precision (RST)", list(table.rules), list(else_rules), steps)
+
+    valid_combos = table.valid_input_combinations()
+    combo_actions: dict[tuple, tuple] = {}
+    for combo in valid_combos:
+        actions = table.effective_actions(combo)
+        if actions is not None:
+            combo_actions[tuple(sorted(combo.items()))] = tuple(sorted(actions.items()))
+
+    all_cond_names = [c.name for c in table.conditions]
+    total_combos = len(combo_actions)
+
+    steps.append(ReductionStep(
+        "Variable precision parameters",
+        {"threshold": threshold, "total_combos": total_combos},
+    ))
+
+    def _classification_accuracy(cond_subset: list[str]) -> float:
+        """Compute fraction of combos correctly classified using only cond_subset."""
+        # Group combos by their projected condition values (equivalence classes)
+        equiv_classes: dict[tuple, list[tuple]] = {}
+        for combo_key, action in combo_actions.items():
+            combo = dict(combo_key)
+            projected = tuple((c, combo.get(c, DONT_CARE)) for c in cond_subset)
+            equiv_classes.setdefault(projected, []).append(action)
+
+        correct = 0
+        for actions_in_class in equiv_classes.values():
+            # Majority vote: count the most common action
+            action_counts: dict[tuple, int] = {}
+            for a in actions_in_class:
+                action_counts[a] = action_counts.get(a, 0) + 1
+            correct += max(action_counts.values())
+
+        return correct / total_combos if total_combos > 0 else 1.0
+
+    # Start with all conditions, try removing each
+    current_conds = list(all_cond_names)
+    full_accuracy = _classification_accuracy(current_conds)
+
+    steps.append(ReductionStep(
+        "Full table classification accuracy",
+        {"accuracy": full_accuracy},
+    ))
+
+    # Rank conditions by significance (conditional entropy)
+    significance: dict[str, float] = {}
+    for cond_name in all_cond_names:
+        significance[cond_name] = _condition_significance(
+            cond_name, valid_combos, combo_actions,
+        )
+
+    # Sort by entropy ascending = most significant first (lowest entropy = most useful)
+    sorted_by_significance = sorted(all_cond_names, key=lambda c: significance[c])
+
+    steps.append(ReductionStep(
+        "Condition significance (conditional entropy, lower = more significant)",
+        {c: round(significance[c], 4) for c in sorted_by_significance},
+    ))
+
+    # Try removing conditions starting from least significant
+    removed_conds: list[str] = []
+    for cond_name in reversed(sorted_by_significance):
+        test_conds = [c for c in current_conds if c != cond_name]
+        if not test_conds:
+            break  # keep at least one condition
+        accuracy = _classification_accuracy(test_conds)
+        if accuracy >= threshold:
+            current_conds = test_conds
+            removed_conds.append(cond_name)
+            steps.append(ReductionStep(
+                f"Removed '{cond_name}' (accuracy {accuracy:.4f} >= {threshold})",
+                {"remaining": list(current_conds), "accuracy": accuracy},
+            ))
+        else:
+            steps.append(ReductionStep(
+                f"Kept '{cond_name}' (accuracy {accuracy:.4f} < {threshold})",
+                {"remaining": list(current_conds), "accuracy_without": accuracy},
+            ))
+
+    # Build reduced rules
+    reduced_rules = _project_rules_to_dont_care(normal_rules, removed_conds)
+    reduced_rules = _collapse_multi_valued(reduced_rules, table.conditions)
+    reduced_rules.extend(else_rules)
+
+    final_accuracy = _classification_accuracy(current_conds)
+
+    steps.append(ReductionStep(
+        "Reduction complete",
+        {
+            "original_conditions": len(all_cond_names),
+            "reduced_conditions": len(current_conds),
+            "kept": current_conds,
+            "removed": removed_conds,
+            "final_accuracy": final_accuracy,
+            "original_rules": len(table.rules),
+            "reduced_rules": len(reduced_rules),
+        },
+    ))
+
+    return ReductionResult("Variable Precision (RST)", list(table.rules), reduced_rules, steps)
+
+
+def clustering_reduction(table: DecisionTable) -> ReductionResult:
+    """Reduce by clustering similar conditions and selecting representatives.
+
+    Groups conditions based on how similarly they partition the input space
+    (using a distance metric derived from agreement on input combos).
+    Selects the most informative condition from each cluster using
+    Partitioning Around Medoids (PAM).
+    """
+    steps: list[ReductionStep] = []
+
+    if not table.rules or not table.conditions:
+        return ReductionResult("Clustering", list(table.rules), list(table.rules), steps)
+
+    normal_rules, else_rules = _split_else_rules(table.rules)
+    if not normal_rules:
+        return ReductionResult("Clustering", list(table.rules), list(else_rules), steps)
+
+    valid_combos = table.valid_input_combinations()
+    combo_actions: dict[tuple, tuple] = {}
+    for combo in valid_combos:
+        actions = table.effective_actions(combo)
+        if actions is not None:
+            combo_actions[tuple(sorted(combo.items()))] = tuple(sorted(actions.items()))
+
+    all_cond_names = [c.name for c in table.conditions]
+
+    if len(all_cond_names) <= 1:
+        # Can't cluster a single condition
+        reduced = list(normal_rules)
+        reduced.extend(else_rules)
+        return ReductionResult("Clustering", list(table.rules), reduced, steps)
+
+    # Build condition partition vectors: for each condition, how it splits combos
+    # Two combos are in the same partition cell if they have the same value for that condition
+    partitions: dict[str, dict[str, set[int]]] = {}
+    for cond_name in all_cond_names:
+        part: dict[str, set[int]] = {}
+        for idx, combo in enumerate(valid_combos):
+            val = combo.get(cond_name, DONT_CARE)
+            part.setdefault(val, set()).add(idx)
+        partitions[cond_name] = part
+
+    # Compute pairwise distance between conditions based on partition agreement
+    # Distance = fraction of combo pairs where the two conditions disagree
+    # on whether they're in the same partition cell
+    n = len(valid_combos)
+    distances: dict[tuple[str, str], float] = {}
+    for i, c1 in enumerate(all_cond_names):
+        for j, c2 in enumerate(all_cond_names):
+            if i >= j:
+                continue
+            # Count agreements: pairs where both conditions agree (same cell or different cell)
+            agreements = 0
+            total_pairs = 0
+            for p_idx in range(n):
+                for q_idx in range(p_idx + 1, n):
+                    total_pairs += 1
+                    # Are p,q in same cell for c1?
+                    same_c1 = any(
+                        p_idx in cell and q_idx in cell
+                        for cell in partitions[c1].values()
+                    )
+                    same_c2 = any(
+                        p_idx in cell and q_idx in cell
+                        for cell in partitions[c2].values()
+                    )
+                    if same_c1 == same_c2:
+                        agreements += 1
+            dist = 1.0 - (agreements / total_pairs) if total_pairs > 0 else 0.0
+            distances[(c1, c2)] = dist
+            distances[(c2, c1)] = dist
+
+    steps.append(ReductionStep(
+        "Condition pairwise distances",
+        {f"{c1}-{c2}": round(d, 4) for (c1, c2), d in distances.items() if c1 < c2},
+    ))
+
+    # Determine number of clusters using condition significance
+    # Keep enough clusters to preserve decision-making
+    significance: dict[str, float] = {}
+    for cond_name in all_cond_names:
+        significance[cond_name] = _condition_significance(
+            cond_name, valid_combos, combo_actions,
+        )
+
+    # Count how many conditions have non-zero distinguishing power
+    # (conditions with 0 entropy are perfectly correlated with the decision)
+    useful_conds = [c for c in all_cond_names if significance[c] < math.log2(max(len(combo_actions), 2))]
+    # Use at least 1 cluster, at most all conditions
+    k = max(1, min(len(useful_conds), len(all_cond_names) - 1))
+
+    # If k >= number of conditions, no clustering benefit
+    if k >= len(all_cond_names):
+        reduced = list(normal_rules)
+        reduced.extend(else_rules)
+        steps.append(ReductionStep(
+            "No clustering benefit (all conditions needed)",
+            {"k": k, "conditions": len(all_cond_names)},
+        ))
+        return ReductionResult("Clustering", list(table.rules), reduced, steps)
+
+    steps.append(ReductionStep(
+        "Cluster count determined",
+        {"k": k, "total_conditions": len(all_cond_names)},
+    ))
+
+    # PAM (Partitioning Around Medoids) clustering
+    # Initialize medoids: pick k conditions with lowest significance (most informative)
+    sorted_by_sig = sorted(all_cond_names, key=lambda c: significance[c])
+    medoids = sorted_by_sig[:k]
+
+    max_pam_iterations = 20
+    for pam_iter in range(max_pam_iterations):
+        # Assign each condition to nearest medoid
+        clusters: dict[str, list[str]] = {m: [] for m in medoids}
+        for cond in all_cond_names:
+            if cond in medoids:
+                clusters[cond].append(cond)
+            else:
+                nearest = min(medoids, key=lambda m: distances.get((cond, m), 0.0))
+                clusters[nearest].append(cond)
+
+        # Try swapping each medoid with each non-medoid
+        improved = False
+        best_cost = sum(
+            min(distances.get((c, m), 0.0) for m in medoids)
+            for c in all_cond_names if c not in medoids
+        )
+
+        for mi, medoid in enumerate(list(medoids)):
+            for cond in all_cond_names:
+                if cond in medoids:
+                    continue
+                # Swap
+                new_medoids = list(medoids)
+                new_medoids[mi] = cond
+                new_cost = sum(
+                    min(distances.get((c, m), 0.0) for m in new_medoids)
+                    for c in all_cond_names if c not in new_medoids
+                )
+                if new_cost < best_cost:
+                    best_cost = new_cost
+                    medoids = new_medoids
+                    improved = True
+                    break
+            if improved:
+                break
+
+        if not improved:
+            break
+
+    # Final cluster assignment
+    clusters = {m: [] for m in medoids}
+    for cond in all_cond_names:
+        if cond in medoids:
+            clusters[cond].append(cond)
+        else:
+            nearest = min(medoids, key=lambda m: distances.get((cond, m), 0.0))
+            clusters[nearest].append(cond)
+
+    steps.append(ReductionStep(
+        "Clusters formed (medoid = representative)",
+        {medoid: members for medoid, members in clusters.items()},
+    ))
+
+    # Verify the selected medoids preserve the decision logic
+    # If not, add back conditions greedily until logic is preserved
+    diff_pairs: list[tuple[dict[str, str], dict[str, str]]] = []
+    combo_list = list(combo_actions.items())
+    for i in range(len(combo_list)):
+        for j in range(i + 1, len(combo_list)):
+            if combo_list[i][1] != combo_list[j][1]:
+                diff_pairs.append((dict(combo_list[i][0]), dict(combo_list[j][0])))
+
+    selected_conds = list(medoids)
+    if diff_pairs:
+        # Check if medoids distinguish all diff pairs
+        undistinguished = set()
+        for idx, (c1, c2) in enumerate(diff_pairs):
+            if not any(c1.get(c) != c2.get(c) for c in selected_conds):
+                undistinguished.add(idx)
+
+        # Add back conditions to cover undistinguished pairs
+        remaining = [c for c in all_cond_names if c not in selected_conds]
+        while undistinguished and remaining:
+            best = max(remaining, key=lambda c: sum(
+                1 for idx in undistinguished
+                if diff_pairs[idx][0].get(c) != diff_pairs[idx][1].get(c)
+            ))
+            newly_covered = {
+                idx for idx in undistinguished
+                if diff_pairs[idx][0].get(best) != diff_pairs[idx][1].get(best)
+            }
+            if not newly_covered:
+                break
+            selected_conds.append(best)
+            remaining.remove(best)
+            undistinguished -= newly_covered
+
+    removed_conds = [c for c in all_cond_names if c not in selected_conds]
+
+    if removed_conds != [c for c in all_cond_names if c not in medoids]:
+        steps.append(ReductionStep(
+            "Added conditions back to preserve logic",
+            {"final_kept": selected_conds, "removed": removed_conds},
+        ))
+
+    # Build reduced rules
+    reduced_rules = _project_rules_to_dont_care(normal_rules, removed_conds)
+    reduced_rules = _collapse_multi_valued(reduced_rules, table.conditions)
+    reduced_rules.extend(else_rules)
+
+    steps.append(ReductionStep(
+        "Reduction complete",
+        {
+            "original_conditions": len(all_cond_names),
+            "reduced_conditions": len(selected_conds),
+            "original_rules": len(table.rules),
+            "reduced_rules": len(reduced_rules),
+        },
+    ))
+
+    return ReductionResult("Clustering", list(table.rules), reduced_rules, steps)
+
+
+def incremental_reduction(
+    table: DecisionTable,
+    previous_result: ReductionResult | None = None,
+    method: str = "qm",
+) -> ReductionResult:
+    """Incrementally update a previous reduction when the table changes.
+
+    Instead of recomputing the full reduction from scratch, this method:
+    1. Identifies which rules changed (added, removed, or modified)
+    2. Determines if affected rules can be locally re-reduced
+    3. Falls back to full reduction only when necessary
+
+    This is significantly faster for interactive editing where changes are
+    small relative to the total table size.
+
+    Args:
+        table: The current (modified) decision table.
+        previous_result: The result of a prior reduction on a similar table.
+            If None, performs a full reduction.
+        method: Which base reduction algorithm to use ('qm', 'petrick',
+            'merge', 'espresso'). Defaults to 'qm'.
+    """
+    methods = {
+        "qm": quine_mccluskey,
+        "petrick": petricks_method,
+        "merge": rule_merging,
+        "espresso": espresso,
+    }
+    reduce_fn = methods.get(method, quine_mccluskey)
+    method_name = f"Incremental ({method.upper()})"
+    steps: list[ReductionStep] = []
+
+    if not table.rules or not table.conditions:
+        return ReductionResult(method_name, list(table.rules), list(table.rules), steps)
+
+    # No previous result — full reduction
+    if previous_result is None:
+        steps.append(ReductionStep(
+            "No previous result — full reduction",
+            {"method": method},
+        ))
+        full_result = reduce_fn(table)
+        return ReductionResult(
+            method_name,
+            full_result.original_rules,
+            full_result.reduced_rules,
+            steps + full_result.steps,
+        )
+
+    # Identify what changed between previous original rules and current rules
+    prev_rules = previous_result.original_rules
+    prev_reduced = previous_result.reduced_rules
+    curr_rules = table.rules
+
+    # Build fingerprints for comparison
+    def _rule_fingerprint(rule: Rule) -> tuple:
+        return (
+            tuple(sorted(rule.condition_entries.items())),
+            rule.action_profile(),
+            rule.is_else,
+        )
+
+    prev_fps = {_rule_fingerprint(r) for r in prev_rules}
+    curr_fps = {_rule_fingerprint(r) for r in curr_rules}
+
+    added_fps = curr_fps - prev_fps
+    removed_fps = prev_fps - curr_fps
+
+    steps.append(ReductionStep(
+        "Change detection",
+        {
+            "rules_added": len(added_fps),
+            "rules_removed": len(removed_fps),
+            "rules_unchanged": len(prev_fps & curr_fps),
+        },
+    ))
+
+    # If nothing changed, return previous result
+    if not added_fps and not removed_fps:
+        steps.append(ReductionStep("No changes detected — reusing previous result", {}))
+        return ReductionResult(method_name, list(curr_rules), list(prev_reduced), steps)
+
+    # Identify affected action profiles
+    affected_profiles: set[tuple] = set()
+    for fp in added_fps | removed_fps:
+        affected_profiles.add(fp[1])  # action_profile
+
+    steps.append(ReductionStep(
+        "Affected action profiles",
+        {"profiles": [str(p) for p in affected_profiles]},
+    ))
+
+    # For unaffected action profiles, reuse previous reduced rules
+    reused_rules: list[Rule] = []
+    needs_reduction_rules: list[Rule] = []
+
+    for rule in prev_reduced:
+        if rule.action_profile() not in affected_profiles and not rule.is_else:
+            reused_rules.append(copy.deepcopy(rule))
+
+    steps.append(ReductionStep(
+        "Reused rules from previous reduction",
+        {"reused_count": len(reused_rules)},
+    ))
+
+    # Build a partial table with only the affected rules for re-reduction
+    affected_rules = [
+        r for r in curr_rules
+        if r.action_profile() in affected_profiles or r.is_else
+    ]
+
+    if affected_rules:
+        partial_table = DecisionTable(
+            name=table.name,
+            conditions=list(table.conditions),
+            actions=list(table.actions),
+            rules=affected_rules,
+            constraints=list(table.constraints),
+            table_type=table.table_type,
+        )
+        partial_result = reduce_fn(partial_table)
+        needs_reduction_rules = list(partial_result.reduced_rules)
+
+        steps.append(ReductionStep(
+            "Partial re-reduction on affected rules",
+            {
+                "affected_rules": len(affected_rules),
+                "reduced_to": len(needs_reduction_rules),
+            },
+        ))
+        steps.extend(partial_result.steps)
+
+    # Combine reused + newly reduced
+    all_reduced = reused_rules + needs_reduction_rules
+
+    # Verify equivalence — if not equivalent, fall back to full reduction
+    reduced_table = DecisionTable(
+        name=table.name,
+        conditions=list(table.conditions),
+        actions=list(table.actions),
+        rules=all_reduced,
+        constraints=list(table.constraints),
+        table_type=table.table_type,
+    )
+    is_equiv, diffs = table.is_equivalent_to(reduced_table)
+
+    if not is_equiv:
+        steps.append(ReductionStep(
+            "Incremental result not equivalent — falling back to full reduction",
+            {"differences": len(diffs)},
+        ))
+        full_result = reduce_fn(table)
+        return ReductionResult(
+            method_name,
+            list(curr_rules),
+            full_result.reduced_rules,
+            steps + full_result.steps,
+        )
+
+    steps.append(ReductionStep(
+        "Reduction complete (incremental)",
+        {
+            "original_rules": len(curr_rules),
+            "reduced_rules": len(all_reduced),
+            "reused_from_previous": len(reused_rules),
+            "newly_reduced": len(needs_reduction_rules),
+        },
+    ))
+
+    return ReductionResult(method_name, list(curr_rules), all_reduced, steps)
+
+
 @dataclass
 class ComparisonResult:
     qm_result: ReductionResult
     petrick_result: ReductionResult
     rule_merging_result: ReductionResult | None = None
     espresso_result: ReductionResult | None = None
+    prr_result: ReductionResult | None = None
+    vpr_result: ReductionResult | None = None
+    clustering_result: ReductionResult | None = None
 
 
 def compare_reductions(table: DecisionTable) -> ComparisonResult:
@@ -905,4 +1618,7 @@ def compare_reductions(table: DecisionTable) -> ComparisonResult:
         petrick_result=petricks_method(table),
         rule_merging_result=rule_merging(table),
         espresso_result=espresso(table),
+        prr_result=positive_region_reduction(table),
+        vpr_result=variable_precision_reduction(table),
+        clustering_result=clustering_reduction(table),
     )

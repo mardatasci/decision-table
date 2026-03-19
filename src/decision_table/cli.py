@@ -13,7 +13,11 @@ from .model import (
     Rule, TableType, make_boolean_condition, make_enum_condition,
     make_numeric_condition,
 )
-from .reduction import compare_reductions, espresso, petricks_method, quine_mccluskey, rule_merging
+from .reduction import (
+    clustering_reduction, compare_reductions, espresso, incremental_reduction,
+    petricks_method, positive_region_reduction, quine_mccluskey, rule_merging,
+    variable_precision_reduction,
+)
 from .serialization import load_file, save_file
 from .testing import (
     calculate_coverage, export_test_cases_csv, generate_all_tests,
@@ -320,8 +324,9 @@ def validate(file: str, check: str):
 
 @cli.command()
 @click.argument("file")
-@click.option("--method", type=click.Choice(["qm", "petrick", "merge", "espresso", "all"]),
-              default="qm", help="Reduction method")
+@click.option("--method", type=click.Choice([
+    "qm", "petrick", "merge", "espresso", "prr", "vpr", "clustering", "incremental", "all",
+]), default="qm", help="Reduction method")
 @click.option("--steps", is_flag=True, help="Show step-by-step details")
 @click.option("-o", "--output", default=None, help="Save reduced table to file")
 def reduce(file: str, method: str, steps: bool, output: str | None):
@@ -333,6 +338,10 @@ def reduce(file: str, method: str, steps: bool, output: str | None):
         "petrick": petricks_method,
         "merge": rule_merging,
         "espresso": espresso,
+        "prr": positive_region_reduction,
+        "vpr": variable_precision_reduction,
+        "clustering": clustering_reduction,
+        "incremental": incremental_reduction,
     }
 
     if method == "all":
@@ -385,9 +394,14 @@ def compare(file: str):
     rt.add_column("Petrick's", justify="center")
     rt.add_column("Rule Merging", justify="center")
     rt.add_column("Espresso", justify="center")
+    rt.add_column("PRR (RST)", justify="center")
+    rt.add_column("VPR (RST)", justify="center")
+    rt.add_column("Clustering", justify="center")
 
     results = [comparison.qm_result, comparison.petrick_result,
-               comparison.rule_merging_result, comparison.espresso_result]
+               comparison.rule_merging_result, comparison.espresso_result,
+               comparison.prr_result, comparison.vpr_result,
+               comparison.clustering_result]
     rt.add_row("Original rules", *[str(len(r.original_rules)) for r in results])
     rt.add_row("Reduced rules", *[str(len(r.reduced_rules)) for r in results])
     rt.add_row("Reduction", *[f"{r.reduction_percentage:.1f}%" for r in results])

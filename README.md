@@ -22,13 +22,25 @@ A tool for creation, editing, management, and optimization of decision tables. D
 - **Constraint check**: Reports which combinations are excluded by constraints
 - All checks are constraint-aware (skip impossible combinations)
 
-### Logic Reduction (4 algorithms)
+### Logic Reduction (8 algorithms)
+
+#### Row Reduction (merge/eliminate rules)
 - **Quine-McCluskey**: Systematic prime implicant identification and greedy minimal cover
 - **Petrick's Method**: Guaranteed optimal minimal cover via product-of-sums expansion
 - **Rule Merging**: Intuitive pairwise merging of rules differing in one condition -- best for learning
 - **Espresso**: Industry-standard heuristic (UC Berkeley) using expand/irredundant/reduce iterations -- best for large tables
+
+#### Column Reduction (remove dispensable conditions)
+- **Positive Region Reduction (RST)**: Rough Set Theory method that finds the minimal set of conditions preserving the positive region -- identifies and removes conditions that don't affect decision-making
+- **Variable Precision Reduction (RST)**: Extends PRR with a configurable accuracy threshold (0.0-1.0) for tolerating noise -- ranks conditions by conditional entropy and removes the least significant ones
+- **Clustering-Based Reduction**: Groups correlated conditions using Partitioning Around Medoids (PAM), selects the most representative condition from each cluster, and verifies decision logic is preserved
+
+#### Dynamic Reduction
+- **Incremental Reduction**: Updates a previous reduction when rules change, only re-reducing affected action profiles -- wraps any base method (QM, Petrick, Merge, Espresso) with automatic fallback to full reduction when needed
+
+#### Shared Features
 - **Multi-valued support**: Post-processing collapses expanded rules back into don't-cares
-- **Compare All**: Run all 4 methods side by side to compare results
+- **Compare All**: Run all 7 methods side by side to compare results
 - **Equivalence check**: Verify original and reduced tables produce identical outputs
 - **Undo Reduce**: Restore original rules after reduction
 
@@ -146,7 +158,7 @@ The web UI provides a single-page editor with everything in one view:
 - **Grid editor**: Click any cell to cycle through its values (conditions cycle through values + don't-care, actions cycle through values)
 - **Analysis tabs** (below the grid):
   - **Validation**: Run all 5 checks or individual checks, styled error/warning/info messages with rule references
-  - **Reduction**: Choose from 4 algorithms, view reduced table, compare all methods side-by-side, apply results
+  - **Reduction**: Choose from 8 algorithms (4 row, 3 column, 1 incremental), view reduced table, compare all methods side-by-side, apply results
   - **Testing**: Generate per-rule, boundary value, or pairwise tests, view coverage metrics, export to CSV
   - **Constraints**: Add/remove impossible, exclusion, or implication constraints with dynamic forms
 - **Settings page**: Rename table, change hit policy (single/multi-hit), view table details
@@ -254,7 +266,11 @@ dt reduce table.json                          # Quine-McCluskey (default)
 dt reduce table.json --method petrick         # Petrick's Method
 dt reduce table.json --method merge           # Rule Merging
 dt reduce table.json --method espresso        # Espresso
-dt reduce table.json --method all             # run all 4 methods
+dt reduce table.json --method prr             # Positive Region Reduction (RST)
+dt reduce table.json --method vpr             # Variable Precision Reduction (RST)
+dt reduce table.json --method clustering      # Clustering-Based Reduction
+dt reduce table.json --method incremental     # Incremental Reduction
+dt reduce table.json --method all             # run all methods
 dt reduce table.json --steps                  # show step-by-step
 dt reduce table.json -o reduced.json          # save reduced table
 ```
@@ -319,9 +335,20 @@ table.add_constraint(Constraint(
 result = validate_all(table)
 print(f"Valid: {result.is_valid}")
 
-# Reduce
+# Reduce (row reduction)
 reduced = quine_mccluskey(table)
 print(f"Reduced from {len(reduced.original_rules)} to {len(reduced.reduced_rules)} rules")
+
+# Column reduction (remove dispensable conditions)
+from decision_table import positive_region_reduction, variable_precision_reduction
+prr = positive_region_reduction(table)
+vpr = variable_precision_reduction(table, threshold=0.9)  # allow 10% noise
+
+# Incremental reduction (reuse previous result after edits)
+from decision_table import incremental_reduction
+first = quine_mccluskey(table)
+# ... modify table ...
+updated = incremental_reduction(table, previous_result=first, method="qm")
 
 # Generate tests
 tests = generate_all_tests(table)
@@ -375,7 +402,7 @@ dt convert samples/insurance_full_featured.json -o table.xlsx
 ## Running Tests
 
 ```bash
-# Run all 128 tests
+# Run all 153 tests
 pytest tests/ -v
 
 # With coverage report
@@ -397,7 +424,7 @@ decision_table/
 │   ├── __init__.py         # Public API (all exports)
 │   ├── model.py            # Core: Condition, Action, Rule, Constraint, DecisionTable
 │   ├── validation.py       # 5 checks: completeness, redundancy, contradiction, consistency, constraints
-│   ├── reduction.py        # QM, Petrick, Rule Merging, Espresso + multi-valued collapse
+│   ├── reduction.py        # 8 algorithms: QM, Petrick, Rule Merging, Espresso, PRR, VPR, Clustering, Incremental
 │   ├── testing.py          # Test case generation, BVA, pairwise, coverage metrics
 │   ├── serialization.py    # JSON, CSV, Excel I/O + test case export
 │   ├── cli.py              # Click-based CLI (dt command)
@@ -414,11 +441,11 @@ decision_table/
 │       └── pages/
 │           ├── editor.py    # Main editor: grid, add/remove, validation/reduction/testing/constraints tabs
 │           └── settings.py  # Table metadata and configuration
-├── tests/                  # 128 tests
+├── tests/                  # 153 tests
 │   ├── conftest.py         # Shared fixtures
 │   ├── test_model.py       # Model tests (conditions, rules, constraints, undo/redo)
 │   ├── test_validation.py  # Validation tests (all 5 checks)
-│   ├── test_reduction.py   # Reduction tests (QM, Petrick, Rule Merging, Espresso)
+│   ├── test_reduction.py   # Reduction tests (all 8 algorithms + comparison)
 │   ├── test_serialization.py # I/O roundtrip tests (JSON, CSV, Excel)
 │   ├── test_cli.py         # CLI command tests
 │   └── test_testing.py     # Test generation tests (normal, BVA, pairwise, coverage)
