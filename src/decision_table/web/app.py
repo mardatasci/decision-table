@@ -26,6 +26,14 @@ app = dash.Dash(
     title="Decision Table Editor",
 )
 
+# Silently ignore callbacks from browser extensions that inject unknown
+# Dash components (e.g. accessibility scanners adding "scan-trigger").
+@app.server.errorhandler(KeyError)
+def _handle_unknown_callback(exc):
+    if "Callback function not found" in str(exc):
+        return "", 204
+    raise exc
+
 # Sidebar navigation
 sidebar = dbc.Nav(
     [

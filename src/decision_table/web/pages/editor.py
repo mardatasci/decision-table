@@ -507,6 +507,14 @@ def remove_item(_, target, store_data):
 def cycle_cell(n_clicks_list, store_data):
     if not ctx.triggered_id:
         return dash.no_update
+
+    # When the grid is re-rendered (e.g. on browser refresh), Dash re-registers
+    # all pattern-matching components and may fire this callback even though no
+    # real click occurred.  Guard against that by checking n_clicks > 0.
+    triggered = ctx.triggered
+    if triggered and triggered[0]["value"] == 0:
+        return dash.no_update
+
     cell_id = ctx.triggered_id
     kind = cell_id["kind"]
     row = cell_id["row"]
